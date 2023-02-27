@@ -93,6 +93,7 @@ void print_board(struct _item** board);
 static void stdin_read_cb(evutil_socket_t event, short events, void* user_data);
 static enum item_type type_promotion(enum item_type type);
 static enum item_tier tier_promotion(enum item_tier tier);
+static int tile_compare(const struct _item* tile1, const struct _item* tile2);
 
 static int error(struct _item* tile1, struct _item* tile2, struct _item** board);
 static int merge_tiles(struct _item* tile1, struct _item* tile2, struct _item** board);

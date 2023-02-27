@@ -82,14 +82,6 @@ struct _item** get_board(void) {
                     board[i][j].type = empty;
                     board[i][j].tier = item_tier_lookup[empty];
                 }
-                else if (i == 8 && j == 8) {
-                    board[i][j].type = item1;
-                    board[i][j].tier = item_tier_lookup[item1];
-                }
-                else if (i == 1 && j == 1) {
-                    board[i][j].type = item1;
-                    board[i][j].tier = item_tier_lookup[item1];
-                }
                 else {
                     board[i][j].type = blocked;
                     board[i][j].tier = item_tier_lookup[blocked];
@@ -160,10 +152,10 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
 
         token = strtok_r(hold, " ", &hold);
 
-        if (strcasecmp(token, "merge")) {
+        if (strcasecmp(token, "merge") == 0) {
             command_number = 1;
         }
-        else if (strcasecmp(token, "new")) {
+        else if (strcasecmp(token, "new") == 0) {
             command_number = 2;
         }
 
@@ -196,21 +188,38 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
 
             
         }
-
-        
-
     }
 
-    res = (*commands[command_number])(&context->board[locx1][locy1], &context->board[locx2][locy2], context->board);
+    struct _item* tile1; 
+    struct _item* tile2;
+
+    //bound testing
+    if (command_number < 0) {
+        command_number = 0;
+    }
+    if (locx1 < 0 || locx1 > SIZE || locy1 < 0 || locy1 > SIZE) {
+       tile1 = NULL;
+    }
+    else {
+        tile1 = &context->board[locx1][locy1];
+    }
+    if (locx2 < 0 || locx2 > SIZE || locy2 < 0 || locy2 > SIZE) {
+        tile2 = NULL;
+    }
+    else {
+        tile2 = &context->board[locx2][locy2];
+    }
+
+    res = (*commands[command_number])(tile1, tile2, context->board);
 
     if (res == 0) {
         printf("\033c");
 
         print_board(context->board);
 
-        if (raw_command[0] != '\n') {
-            printf("%s\r\n", command);
-        }
+        // if (raw_command[0] != '\n') {
+        //     printf("%s\r\n", command);
+        // }
     }
 
     free(raw_command);
@@ -251,6 +260,22 @@ static enum item_tier tier_promotion(enum item_tier tier) {
     }
 }
 
+static int tile_compare(const struct _item* tile1, const struct _item* tile2) {
+    int locx1 = tile1->location.x;
+    int locy1 = tile1->location.y;
+
+    int locx2 = tile2->location.x;
+    int locy2 = tile2->location.y;
+
+    if (locx1 == locx2 && locy1 == locy2) {
+        //true they are equal
+        return 1;
+    }
+    else {
+        return 0;
+    }
+}
+
 static int error(struct _item* tile1, struct _item* tile2, struct _item** board) {
     fprintf(stderr, "Invalid command\r\n");
 
@@ -258,11 +283,25 @@ static int error(struct _item* tile1, struct _item* tile2, struct _item** board)
 }
 
 static int merge_tiles(struct _item* tile1, struct _item* tile2, struct _item** board) {
+    if (tile1 == NULL || tile2 == NULL) {
+        fprintf(stderr, "Merge sent with wrong augments\r\n");
+        return 1;
+    }
+
+    if (tile_compare(tile1, tile2)) {
+        fprintf(stderr, "Cannot merge an item with itself\r\n");
+        return 1;
+    }
+
     enum item_type type1 = board[tile1->location.x][tile1->location.y].type;
     enum item_type type2 = board[tile2->location.x][tile2->location.y].type;
 
     if (type1 == blocked || type2 == blocked) {
         fprintf(stderr, "Blocked tiles cannot be merged\r\n");
+        return 1;
+    }
+    else if (type1 == empty || type2 == empty) {
+        fprintf(stderr, "Empty tiles cannot be merged\r\n");
         return 1;
     }
     else if (type1 != type2) {

@@ -1,4 +1,4 @@
-# nerge
+# merge
 
 A possable merge game.
 
@@ -10,4 +10,4 @@ multiple items with enums
 
 ## steps for alpha
 
-* dont segfault []
+* dont segfault - []
