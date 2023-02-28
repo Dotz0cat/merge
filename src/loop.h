@@ -29,7 +29,7 @@ This file is part of merge.
 #include <string.h>
 #include <strings.h>
 
-#define SIZE 9
+#define SIZE 16
 
 #define ITEM_TABLE \
 X(empty, none), \
@@ -95,8 +95,9 @@ static enum item_type type_promotion(enum item_type type);
 static enum item_tier tier_promotion(enum item_tier tier);
 static int tile_compare(const struct _item* tile1, const struct _item* tile2);
 
-static int error(struct _item* tile1, struct _item* tile2, struct _item** board);
-static int merge_tiles(struct _item* tile1, struct _item* tile2, struct _item** board);
-static int new_tile(struct _item* tile1, struct _item* tile2, struct _item** board);
+static int error(struct _item* tile1, struct _item* tile2, loop_context* context);
+static int quit(struct _item* tile1, struct _item* tile2, loop_context* context);
+static int merge_tiles(struct _item* tile1, struct _item* tile2, loop_context* context);
+static int new_tile(struct _item* tile1, struct _item* tile2, loop_context* context);
 
 #endif /* LOOP_H */

@@ -66,6 +66,21 @@ struct _item** get_board(void) {
     if (0 != 1) {
         //initalize everything
 
+        int upper;
+        int lower;
+
+        if (SIZE % 2 == 0) {
+            upper = (SIZE / 2) + 1;
+            lower = (SIZE / 2) - 2; 
+        }
+        else {
+            //integer fun
+            upper = (SIZE / 2) + 1;
+            lower = (SIZE / 2) - 1;
+        }
+
+
+
         board = malloc(SIZE * sizeof(struct _item*));
 
         for (int i = 0; i < SIZE; i++) {
@@ -78,7 +93,7 @@ struct _item** get_board(void) {
                 board[i][j].location.x = i;
                 board[i][j].location.y = j;
 
-                if ((i > 2 && i < 6) && (j > 2 && j < 6)) {
+                if ((i >= lower && i <= upper) && (j >= lower && j <= upper)) {
                     board[i][j].type = empty;
                     board[i][j].tier = item_tier_lookup[empty];
                 }
@@ -94,26 +109,30 @@ struct _item** get_board(void) {
 }
 
 void print_board(struct _item** board) {
-    printf("  0 1 2 3 4 5 6 7 8\r\n");
+    printf("%3c", ' ');
     for (int i = 0; i < SIZE; i++) {
-        printf("%i ", i);
+        printf("%3i", i);
+    }
+    printf("\r\n");
+    for (int i = 0; i < SIZE; i++) {
+        printf("%2i ", i);
         for (int j = 0; j < SIZE; j++) {
             switch (board[i][j].type) {
                 case (empty):
-                    printf("0 ");
+                    printf("%3c", '0');
                 break;
                 case (blocked):
-                    printf("* ");
+                    printf("%3c", '*');
                 break;
                 case (item1):
-                    printf("a ");
+                    printf("%3c", 'a');
                 break;
                 case (item2):
-                    printf("b ");
+                    printf("%3c", 'b');
                 break;
             }
         }
-        printf("\b\r\n");
+        printf("\r\n");
     }
 }
 
@@ -131,18 +150,19 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
         sscanf(raw_command, "%[^\n]", command);
     }
 
-    static const int (*commands[])(struct _item*, struct _item*, struct _item**) = {
+    static const int (*commands[])(struct _item*, struct _item*, loop_context* context) = {
         error,
+        quit,
         merge_tiles,
         new_tile
     };
 
     int res = 0;
     int command_number = 0;
-    int locx1 = 0;
-    int locy1 = 0;
-    int locx2 = 0;
-    int locy2 = 0;
+    int locx1 = -1;
+    int locy1 = -1;
+    int locx2 = -1;
+    int locy2 = -1;
 
     if (raw_command[0] != '\n') {
         char* hold = command;
@@ -152,11 +172,14 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
 
         token = strtok_r(hold, " ", &hold);
 
-        if (strcasecmp(token, "merge") == 0) {
+        if (strcasecmp(token, "quit") == 0) {
             command_number = 1;
         }
-        else if (strcasecmp(token, "new") == 0) {
+        else if (strcasecmp(token, "merge") == 0) {
             command_number = 2;
+        }
+        else if (strcasecmp(token, "new") == 0) {
+            command_number = 3;
         }
 
         token = strtok_r(hold, " ", &hold);
@@ -210,7 +233,7 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
         tile2 = &context->board[locx2][locy2];
     }
 
-    res = (*commands[command_number])(tile1, tile2, context->board);
+    res = (*commands[command_number])(tile1, tile2, context);
 
     if (res == 0) {
         printf("\033c");
@@ -276,13 +299,28 @@ static int tile_compare(const struct _item* tile1, const struct _item* tile2) {
     }
 }
 
-static int error(struct _item* tile1, struct _item* tile2, struct _item** board) {
+static int error(struct _item* tile1, struct _item* tile2, loop_context* context) {
+    (void) tile1;
+    (void) tile2;
+    (void) context;
+
     fprintf(stderr, "Invalid command\r\n");
 
     return 1;
 }
 
-static int merge_tiles(struct _item* tile1, struct _item* tile2, struct _item** board) {
+static int quit(struct _item* tile1, struct _item* tile2, loop_context* context) {
+    (void) tile1;
+    (void) tile2;
+
+    struct timeval delay = {1, 0};
+
+    event_base_loopexit(context->events->base, &delay);
+
+    return 0;
+}
+
+static int merge_tiles(struct _item* tile1, struct _item* tile2, loop_context* context) {
     if (tile1 == NULL || tile2 == NULL) {
         fprintf(stderr, "Merge sent with wrong augments\r\n");
         return 1;
@@ -293,8 +331,8 @@ static int merge_tiles(struct _item* tile1, struct _item* tile2, struct _item** 
         return 1;
     }
 
-    enum item_type type1 = board[tile1->location.x][tile1->location.y].type;
-    enum item_type type2 = board[tile2->location.x][tile2->location.y].type;
+    enum item_type type1 = context->board[tile1->location.x][tile1->location.y].type;
+    enum item_type type2 = context->board[tile2->location.x][tile2->location.y].type;
 
     if (type1 == blocked || type2 == blocked) {
         fprintf(stderr, "Blocked tiles cannot be merged\r\n");
@@ -319,11 +357,9 @@ static int merge_tiles(struct _item* tile1, struct _item* tile2, struct _item** 
     return 0;
 }
 
-static int new_tile(struct _item* tile1, struct _item* tile2, struct _item** board) {
+static int new_tile(struct _item* tile1, struct _item* tile2, loop_context* context) {
     (void) tile2;
     struct _location loc;
-    loc.x = -1;
-    loc.y = -1;
 
     if (tile1 != NULL) {
         if (tile1->type == empty) {
@@ -336,17 +372,18 @@ static int new_tile(struct _item* tile1, struct _item* tile2, struct _item** boa
     }
     else {
         //gen later
-        // while (board[loc.x][loc.y].type != empty) {
-        //     //generate
-        // }
-        loc.x = 5;
-        loc.y = 5;
+        srand48(time(NULL));
+
+        do {
+            loc.x = lrand48() % SIZE;
+            loc.y = lrand48() % SIZE;
+        } while (context->board[loc.x][loc.y].type != empty);
     }
 
     //randominous later
-    if (board[loc.x][loc.y].type == empty) {
-        board[loc.x][loc.y].type = item1;
-        board[loc.x][loc.y].tier = item_tier_lookup[item1];
+    if (context->board[loc.x][loc.y].type == empty) {
+        context->board[loc.x][loc.y].type = item1;
+        context->board[loc.x][loc.y].tier = item_tier_lookup[item1];
     }
     else {
         fprintf(stderr, "Invalid location\r\n");
