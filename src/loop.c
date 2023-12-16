@@ -40,7 +40,7 @@ int loop(loop_context* context) {
     context->events->input_available = event_new(context->events->base, fileno(stdin), EV_READ, stdin_read_cb, (void*) context);
     if (!context->events->input_available  || event_add(context->events->input_available, NULL) < 0) abort();
 
-    context->board = get_board();
+    context->board = get_board(&context->upper_limit, &context->lower_limit);
 
     printf("\033c");
 
@@ -59,7 +59,7 @@ static void sig_int_quit_term_cb(evutil_socket_t sig, short events, void* user_d
     event_base_loopexit(context->events->base, &delay);
 }
 
-struct _item** get_board(void) {
+struct _item** get_board(int* upper_limit, int* lower_limit) {
     struct _item** board;
 
     //0 will be replaced with condition
@@ -79,6 +79,8 @@ struct _item** get_board(void) {
             lower = (SIZE / 2) - 1;
         }
 
+        *upper_limit = upper;
+        *lower_limit = lower;
 
 
         board = malloc(SIZE * sizeof(struct _item*));
@@ -125,9 +127,36 @@ void print_board(struct _item** board) {
                     printf("%3c", '*');
                 break;
                 case (item1):
-                    printf("%3c", 'a');
+                    printf("%3c", '1');
                 break;
                 case (item2):
+                    printf("%3c", '2');
+                break;
+                case (item3):
+                    printf("%3c", '3');
+                break;
+                case (item4):
+                    printf("%3c", '4');
+                break;
+                case (item5):
+                    printf("%3c", '5');
+                break;
+                case (item6):
+                    printf("%3c", '6');
+                break;
+                case (item7):
+                    printf("%3c", '7');
+                break;
+                case (item8):
+                    printf("%3c", '8');
+                break;
+                case (item9):
+                    printf("%3c", '9');
+                break;
+                case (item10):
+                    printf("%3c", 'a');
+                break;
+                case (item11):
                     printf("%3c", 'b');
                 break;
             }
@@ -154,7 +183,8 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
         error,
         quit,
         merge_tiles,
-        new_tile
+        new_tile,
+        unlock_new_tiles
     };
 
     int res = 0;
@@ -181,6 +211,9 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
         else if (strcasecmp(token, "new") == 0) {
             command_number = 3;
         }
+        else if (strcasecmp(token, "unlock") == 0) {
+            command_number = 4;
+        }
 
         token = strtok_r(hold, " ", &hold);
 
@@ -189,11 +222,18 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
 
             token2 = strtok_r(hold2, ",", &hold2);
 
-            locx1 = atoi(token2);
+            sscanf(token2, "%i", &locx1);
 
             token2 = strtok_r(hold2, ",", &hold2);
 
-            locy1 = atoi(token2);
+            if (token2 == NULL) {
+                locy1 = -1;
+            }
+            else {
+                sscanf(token2, "%i", &locy1);
+            }
+
+            //sscanf(token, "%*[^0123456789]%i%*[^0123456789]%i", &locx1, &locy1);
 
             token = strtok_r(hold, " ", &hold);
 
@@ -202,14 +242,17 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
 
                 token2 = strtok_r(hold2, ",", &hold2);
 
-                locx2 = atoi(token2);
+                sscanf(token2, "%i", &locx2);
 
                 token2 = strtok_r(hold2, ",", &hold2);
 
-                locy2 = atoi(token2);
+                if (token2 == NULL) {
+                    locy2 = -1;
+                }
+                else {
+                    sscanf(token2, "%i", &locy2);
+                }
             }
-
-            
         }
     }
 
@@ -248,9 +291,6 @@ static void stdin_read_cb(evutil_socket_t event, short events, void* user_data) 
     free(raw_command);
     free(command);
 
-
-    //sleep(1);
-
     event_add(context->events->input_available, NULL);
 }
 
@@ -261,7 +301,34 @@ static enum item_type type_promotion(enum item_type type) {
             return item2;
         break;
         case (item2):
-            return item2;
+            return item3;
+        break;
+        case (item3):
+            return item4;
+        break;
+        case (item4):
+            return item5;
+        break;
+        case (item5):
+            return item6;
+        break;
+        case (item6):
+            return item7;
+        break;
+        case (item7):
+            return item8;
+        break;
+        case (item8):
+            return item9;
+        break;
+        case (item9):
+            return item10;
+        break;
+        case (item10):
+            return item11;
+        break;
+        case (item11):
+            return item11;
         break;
         default:
             return type;
@@ -275,7 +342,34 @@ static enum item_tier tier_promotion(enum item_tier tier) {
             return tier2;
         break;
         case (tier2):
-            return tier2;
+            return tier3;
+        break;
+        case (tier3):
+            return tier4;
+        break;
+        case (tier4):
+            return tier5;
+        break;
+        case (tier5):
+            return tier6;
+        break;
+        case (tier6):
+            return tier7;
+        break;
+        case (tier7):
+            return tier8;
+        break;
+        case (tier8):
+            return tier9;
+        break;
+        case (tier9):
+            return tier10;
+        break;
+        case (tier10):
+            return tier11;
+        break;
+        case (tier11):
+            return tier11;
         break;
         default:
             return tier;
@@ -374,10 +468,18 @@ static int new_tile(struct _item* tile1, struct _item* tile2, loop_context* cont
         //gen later
         srand48(time(NULL));
 
+        int tries = 0;
         do {
             loc.x = lrand48() % SIZE;
             loc.y = lrand48() % SIZE;
-        } while (context->board[loc.x][loc.y].type != empty);
+            tries++;
+        } while (context->board[loc.x][loc.y].type != empty && tries < (SIZE*SIZE));
+        
+        if (tries == (SIZE*SIZE)) {
+            fprintf(stderr, "The board is already full\r\n");
+            return 1;
+        }
+
     }
 
     //randominous later
@@ -389,6 +491,37 @@ static int new_tile(struct _item* tile1, struct _item* tile2, loop_context* cont
         fprintf(stderr, "Invalid location\r\n");
         return 1;
     }
+
+    return 0;
+}
+
+static int unlock_new_tiles(struct _item* tile1, struct _item* tile2, loop_context* context) {
+    (void) tile1;
+    (void) tile2;
+
+    int upper = context->upper_limit;
+    int lower = context->lower_limit;
+
+    upper++;
+    lower--;
+
+    if (upper > SIZE || lower < 0) {
+        fprintf(stderr, "Already unlocked\r\n");
+        return 1;
+    }
+
+    for (int i = lower; i <= upper; i++) {
+        for (int j = lower; j <= upper; j++) {
+            
+            if (context->board[i][j].type == blocked) {
+                context->board[i][j].type = empty;
+            }
+            
+        }
+    }
+
+    context->upper_limit = upper;
+    context->lower_limit = lower;
 
     return 0;
 }
